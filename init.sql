@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS submissions (
+    id SERIAL PRIMARY KEY,
+    input_text TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
