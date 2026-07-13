@@ -23,3 +23,46 @@ The `POST /classify` endpoint requests structured tracking data from the `gemini
 ### 3. Telemetry & Cost Line Monitoring
 Every transaction actively computes standard production pricing calculations mapped against input and output tokens. The terminal logs track the operations dynamically using the following structure:
 `[AI LOG - Feature: Text Classification] Input Tokens: <count> | Output Tokens: <count> | Estimated Cost: $<calculated_amount>`
+
+
+## Week 4: Asynchronous PDF Report Generator (Background Jobs)
+
+### 1. Architectural Overview
+To optimize API performance and prevent HTTP timeouts, the PDF reporting engine is decoupled into an asynchronous producer-consumer pattern using FastAPI's `BackgroundTasks`. 
+
+* **Trigger (`POST /reports`)**: Inserts a tracking record with a `pending` status into PostgreSQL and immediately yields a response payload containing the unique `report_id` to the client.
+* **Worker Execution**: Runs in a background thread executing data warehouse aggregations via `psycopg` on the active database storage engine.
+* **Artifact Layout Engine**: Synthesizes and draws dynamic graphical components onto a local disk storage layer using `reportlab`.
+* **Verification & Delivery (`GET /reports/{id}/download`)**: Streams the compiled structural PDF back to the system client using an optimized chunked `FileResponse`.
+
+---
+
+### 2. Verified Workflow Logs & Postman Execution
+
+The end-to-end background lifecycle was verified locally via Postman across three phases:
+
+#### Phase A: Job Dispatching
+* **Endpoint**: `POST http://localhost:8080/reports`
+* **Response Payload**:
+    ```json
+    {
+        "message": "Report generation started in the background",
+        "report_id": 2,
+        "status_check_url": "http://localhost:8080/reports/2"
+    }
+    ```
+
+#### Phase B: Asynchronous State Transitions (Polling)
+* **Endpoint**: `GET http://localhost:8080/reports/2`
+* **Response Payload (Processing / Complete)**:
+    ```json
+    {
+        "report_id": 2,
+        "status": "completed",
+        "download_url": "http://localhost:8080/reports/2/download"
+    }
+    ```
+
+#### Phase C: Local Storage & Binary Artifact Streaming
+* **Endpoint**: `GET http://localhost:8080/reports/2/download`
+* **Result**: Postman successfully captures the streamable header and opens a structural PDF canvas displaying automated database telemetry counts grouped by date/status. Wiping or restarting containers does not risk structural data state corruption as the output layer interacts cleanly via Docker storage rules.

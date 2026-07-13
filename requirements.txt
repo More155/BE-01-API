@@ -35,3 +35,4 @@ psycopg-pool
 google-genai
 httpx
 pydantic
+reportlab
