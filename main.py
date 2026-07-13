@@ -1,11 +1,13 @@
 import os
-from fastapi import FastAPI, HTTPException, Body, Depends
+from fastapi import FastAPI, HTTPException, Body, Depends, BackgroundTasks
 from datetime import datetime
 import psycopg
 from psycopg.rows import dict_row
 from pydantic import BaseModel
 from ai_service import AIService
 from schemas import ClassificationResult
+from fastapi.responses import FileResponse
+from report_service import generate_pdf_report_job
 
 app = FastAPI()
 
@@ -60,3 +62,56 @@ class ClassifyRequest(BaseModel):
 def classify_message(payload: ClassifyRequest):
     result = ai_service.analyze_text(payload.text)
     return result
+
+@app.post("/reports")
+def trigger_report_generation(background_tasks: BackgroundTasks):
+    """Triggers report generation as an asynchronous background job."""
+    with psycopg.connect(DATABASE_URL) as conn:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO reports (status) VALUES ('pending') RETURNING id;")
+            report_id = cur.fetchone()[0]
+            
+    background_tasks.add_task(generate_pdf_report_job, report_id)
+    
+    return {
+        "message": "Report generation started in the background",
+        "report_id": report_id,
+        "status_check_url": f"http://localhost:8080/reports/{report_id}"
+    }
+
+@app.get("/reports/{report_id}")
+def get_report_status(report_id: int):
+    """Allows the client to poll the status of a specific job."""
+    with psycopg.connect(DATABASE_URL) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT status, artifact_path FROM reports WHERE id = %s", (report_id,))
+            result = cur.fetchone()
+            
+    if not result:
+        raise HTTPException(status_code=404, detail="Report job not found")
+        
+    status, artifact_path = result
+    response = {"report_id": report_id, "status": status}
+    
+    if status == "completed":
+        response["download_url"] = f"http://localhost:8080/reports/{report_id}/download"
+        
+    return response
+
+@app.get("/reports/{report_id}/download")
+def download_report_pdf(report_id: int):
+    """Streams the completed static PDF file directly to the client's browser/disk."""
+    with psycopg.connect(DATABASE_URL) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT status, artifact_path FROM reports WHERE id = %s", (report_id,))
+            result = cur.fetchone()
+            
+    if not result or result[0] != "completed":
+        raise HTTPException(status_code=400, detail="Report is not completed or does not exist")
+        
+    artifact_path = result[1]
+    
+    if not os.path.exists(artifact_path):
+        raise HTTPException(status_code=500, detail="Artifact missing on disk storage layer")
+        
+    return FileResponse(artifact_path, media_type="application/pdf", filename=f"report_{report_id}.pdf")
