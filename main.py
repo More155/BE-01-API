@@ -1,8 +1,11 @@
 import os
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body, Depends
 from datetime import datetime
 import psycopg
 from psycopg.rows import dict_row
+from pydantic import BaseModel
+from ai_service import AIService
+from schemas import ClassificationResult
 
 app = FastAPI()
 
@@ -47,3 +50,13 @@ def get_all_data():
             cur.execute("SELECT * FROM submissions;")
             records = cur.fetchall()
     return {"submissions": records}
+
+ai_service = AIService()
+
+class ClassifyRequest(BaseModel):
+    text: str
+
+@app.post("/classify", response_model=ClassificationResult)
+def classify_message(payload: ClassifyRequest):
+    result = ai_service.analyze_text(payload.text)
+    return result
