@@ -36,3 +36,5 @@ google-genai
 httpx
 pydantic
 reportlab
+beautifulsoup4
+requests

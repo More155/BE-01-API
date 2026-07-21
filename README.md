@@ -66,3 +66,40 @@ The end-to-end background lifecycle was verified locally via Postman across thre
 #### Phase C: Local Storage & Binary Artifact Streaming
 * **Endpoint**: `GET http://localhost:8080/reports/2/download`
 * **Result**: Postman successfully captures the streamable header and opens a structural PDF canvas displaying automated database telemetry counts grouped by date/status. Wiping or restarting containers does not risk structural data state corruption as the output layer interacts cleanly via Docker storage rules.
+
+---
+
+## Week 5 Feature: Ethical Web Scraper & Background Data Pipeline
+
+### 1. Pipeline Architecture
+To prepare a high-quality corpus for downstream RAG integration, this service implements an ethical web scraping and parsing pipeline:
+* **Fetch (`requests` / `httpx`)**: Retrieves targeted web pages asynchronously using descriptive user identification headers.
+* **Parse (`BeautifulSoup4`)**: Parses HTML responses and extracts structured target attributes (e.g., page text, quotes, author metadata, tags).
+* **Clean & Structure**: Sanitizes extracted text and maps raw records into schema-validated models.
+* **Persist (`psycopg`)**: Inserts normalized records into PostgreSQL database tables with conflict handling to avoid duplicating target records.
+
+### 2. Professionalism Layer & Ethical Bot Behavior
+* **`robots.txt` Compliance**: Queries and parses target site directives prior to crawling to respect disallowed paths and crawl delays.
+* **Rate-Limiting & Politeness**: Enforces interval delays between consecutive network calls to prevent overwhelming remote host bandwidth.
+* **Identifiable User-Agent**: Transmits customized HTTP `User-Agent` identification headers identifying the bot and providing contact details for webmasters.
+
+### 3. Execution Flow (`POST /scrape`)
+
+#### Request Payload
+* **Endpoint**: `POST http://localhost:8080/scrape`
+* **Body**:
+    ```json
+    {
+      "urls": [
+        "[https://quotes.toscrape.com/page/1/](https://quotes.toscrape.com/page/1/)",
+        "[https://quotes.toscrape.com/page/2/](https://quotes.toscrape.com/page/2/)"
+      ]
+    }
+    ```
+
+#### Response Payload
+```json
+{
+  "status": "processing",
+  "message": "Scraper has been spun up in the background for 2 targets."
+}
