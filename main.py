@@ -6,11 +6,81 @@ from psycopg.rows import dict_row
 from pydantic import BaseModel
 from ai_service import AIService
 from schemas import ClassificationResult
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from report_service import generate_pdf_report_job
 from scraper import EthicalScraper
+from tasks_db import get_tasks_db_connection, init_tasks_db
 
 app = FastAPI()
+
+init_tasks_db()
+
+
+def task_row_to_dict(row):
+    return {"id": row["id"], "title": row["title"], "done": bool(row["done"])}
+
+
+@app.get("/tasks")
+def list_tasks():
+    with get_tasks_db_connection() as conn:
+        rows = conn.execute("SELECT * FROM tasks").fetchall()
+    return [task_row_to_dict(row) for row in rows]
+
+
+@app.get("/tasks/{task_id}")
+def get_task(task_id: int):
+    with get_tasks_db_connection() as conn:
+        row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    if row is None:
+        return JSONResponse(status_code=404, content={"error": "Task not found"})
+    return task_row_to_dict(row)
+
+
+@app.post("/tasks", status_code=201)
+def create_task(payload: dict = Body(...)):
+    title = payload.get("title")
+    if not title or not isinstance(title, str):
+        return JSONResponse(status_code=400, content={"error": "title is required"})
+    done = bool(payload.get("done", False))
+
+    with get_tasks_db_connection() as conn:
+        cursor = conn.execute(
+            "INSERT INTO tasks (title, done) VALUES (?, ?)", (title, done)
+        )
+        conn.commit()
+        task_id = cursor.lastrowid
+
+    return {"id": task_id, "title": title, "done": done}
+
+
+@app.put("/tasks/{task_id}")
+def update_task(task_id: int, payload: dict = Body(...)):
+    with get_tasks_db_connection() as conn:
+        row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if row is None:
+            return JSONResponse(status_code=404, content={"error": "Task not found"})
+
+        title = payload.get("title", row["title"])
+        if not title or not isinstance(title, str):
+            return JSONResponse(status_code=400, content={"error": "title is required"})
+        done = bool(payload.get("done", row["done"]))
+
+        conn.execute(
+            "UPDATE tasks SET title = ?, done = ? WHERE id = ?", (title, done, task_id)
+        )
+        conn.commit()
+
+    return {"id": task_id, "title": title, "done": done}
+
+
+@app.delete("/tasks/{task_id}", status_code=204)
+def delete_task(task_id: int):
+    with get_tasks_db_connection() as conn:
+        row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if row is None:
+            return JSONResponse(status_code=404, content={"error": "Task not found"})
+        conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        conn.commit()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:mysecretpassword@localhost:5432/myapp")
 
