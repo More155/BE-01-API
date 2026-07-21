@@ -8,6 +8,7 @@ from ai_service import AIService
 from schemas import ClassificationResult
 from fastapi.responses import FileResponse
 from report_service import generate_pdf_report_job
+from scraper import EthicalScraper
 
 app = FastAPI()
 
@@ -115,3 +116,34 @@ def download_report_pdf(report_id: int):
         raise HTTPException(status_code=500, detail="Artifact missing on disk storage layer")
         
     return FileResponse(artifact_path, media_type="application/pdf", filename=f"report_{report_id}.pdf")
+
+class ScrapeRequest(BaseModel):
+    urls: list[str]
+
+@app.post("/scrape")
+def trigger_scraper(payload: ScrapeRequest, background_tasks: BackgroundTasks):
+    """
+    Exposes the scraper pipeline through an actionable endpoint.
+    Uses BackgroundTasks so that long-running network operations don't time out the client.
+    """
+    def run_scraper_job(urls_to_process: list[str]):
+        scraper = EthicalScraper(
+            base_url="https://quotes.toscrape.com", 
+            bot_name="DataGatheringClassBot",
+            contact_email="student@example.com",
+            delay=3.0
+        )
+        for target in urls_to_process:
+            record = scraper.run_pipeline(target)
+            if record:
+                # Appends into your active local working project directory
+                with open("rag_corpus.jsonl", "a", encoding="utf-8") as f:
+                    f.write(record.model_dump_json() + "\n")
+        print("🎉 Scraping job runner execution complete.")
+
+    background_tasks.add_task(run_scraper_job, payload.urls)
+    
+    return {
+        "status": "processing",
+        "message": f"Scraper has been spun up in the background for {len(payload.urls)} targets."
+    }
