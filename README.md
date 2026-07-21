@@ -1,3 +1,44 @@
+## W3 · A1 — Tasks CRUD backed by SQLite
+
+### 1. Why SQLite
+SQLite requires no separate server or installation, stores the entire database in a single file, and is ideal for a small CRUD assignment where the goal is to demonstrate persistence, not to run a production-grade multi-user database. It ships with Python's standard library (`sqlite3`), so no extra service needs to run alongside the API.
+
+### 2. Where the database file is stored
+The database lives at `tasks.db` in the project root (see [tasks_db.py](tasks_db.py)). It is created automatically the first time the app starts — `init_tasks_db()` runs on FastAPI startup, creates the `tasks` table if it doesn't exist, and seeds three example tasks only if the table is empty. The file is git-ignored since it's local runtime state, not source code.
+
+### 3. How to start the project
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8080
+```
+`tasks.db` is created automatically on first run in the project root.
+
+### 4. Endpoints
+| Method | Path | Behavior |
+| --- | --- | --- |
+| `GET` | `/tasks` | Returns every task from SQLite |
+| `GET` | `/tasks/{id}` | Returns one task, or `404 {"error": "Task not found"}` |
+| `POST` | `/tasks` | Inserts a task; `400 {"error": "title is required"}` if `title` is missing |
+| `PUT` | `/tasks/{id}` | Updates a task's `title`/`done`; `404` if not found |
+| `DELETE` | `/tasks/{id}` | Deletes a task; `204` on success, `404` if not found |
+
+### 5. Example SQL query executed against the database
+```sql
+SELECT * FROM tasks WHERE done = 1;
+```
+Opened `tasks.db` in DB Browser for SQLite, ran the query above to confirm completed tasks, then hit `GET /tasks?...` and manual edits in the viewer to verify the API reflects the underlying table immediately.
+
+*(Add your DB Browser screenshot here: `docs/tasks-db-screenshot.png`)*
+
+### 6. Persistence proof
+1. `POST /tasks` a few tasks.
+2. Restart the server (`Ctrl+C`, then `uvicorn main:app --reload --port 8080` again).
+3. `GET /tasks` — the tasks are still there, and the three seed tasks are **not** duplicated.
+
+---
+
 ## Assignment Solution: Docker & Postgres Integration
 
 ### 1. Architectural Integrity
