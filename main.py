@@ -1,4 +1,8 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Body, Depends, BackgroundTasks
 from datetime import datetime
 import psycopg
@@ -10,8 +14,14 @@ from fastapi.responses import FileResponse, JSONResponse
 from report_service import generate_pdf_report_job
 from scraper import EthicalScraper
 from tasks_db import get_tasks_db_connection, init_tasks_db
+from auth import router as auth_router, AuthError, auth_error_handler
 
-app = FastAPI()
+app = FastAPI(
+    title="BE-01 API",
+    description="FlyRank backend track project. Supabase Auth secures /auth/logout, /protected/profile and /protected/dashboard — click Authorize and paste an access_token from /auth/login.",
+)
+app.include_router(auth_router)
+app.add_exception_handler(AuthError, auth_error_handler)
 
 init_tasks_db()
 

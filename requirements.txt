@@ -38,3 +38,5 @@ pydantic
 reportlab
 beautifulsoup4
 requests
+supabase
+python-dotenv

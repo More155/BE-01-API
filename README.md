@@ -1,3 +1,64 @@
+## W2 · A4 — Auth · Login & protect (Supabase)
+
+### 1. What this is
+A secured layer on top of the existing API using **Supabase Auth** as the Identity Provider: sign up, log in, log out, and two protected routes that only answer for a verified, logged-in user. No password hashing or JWT signing happens in this codebase — Supabase does that; this server only forwards credentials and verifies the tokens Supabase hands back.
+
+### 2. Setup
+1. Create a free project at [supabase.com](https://supabase.com) (or reuse one).
+2. Under **Project Settings → API**, copy the **Project URL** and the **anon key** (never the `service_role` key).
+3. Under **Authentication → Sign In / Providers → Email**, turn **Confirm email** off for local testing so a fresh signup can log in immediately.
+4. Add to your `.env` (see `.env.example`):
+   ```
+   SUPABASE_URL=your_project_url
+   SUPABASE_KEY=your_anon_key
+   ```
+
+### 3. Run it
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8080
+```
+Interactive docs: `http://127.0.0.1:8080/docs`
+
+### 4. Endpoints
+| Method | Path | Auth | Behavior |
+| --- | --- | --- | --- |
+| `POST` | `/auth/signup` | none | Creates a Supabase user. `201` on success, `400` if `email`/`password` missing or rejected by Supabase. |
+| `POST` | `/auth/login` | none | Returns an `access_token` + `refresh_token`. `400` missing input, `401` invalid credentials. |
+| `POST` | `/auth/logout` | Bearer | Revokes the presented session. `204` on success, `401` if the token is missing/invalid. |
+| `GET` | `/protected/profile` | Bearer | Returns the verified user's id/email/created_at. `401` if missing/invalid/expired token. |
+| `GET` | `/protected/dashboard` | Bearer | Second route proving the same guard is reusable — no new auth code. |
+| `GET` | `/public/info` | none | Open, unauthenticated endpoint. |
+
+All errors are returned as `{"error": "..."}` with the matching status code (`400`/`401`).
+
+### 5. How the guard works
+`auth.py` defines `get_current_user`, a FastAPI dependency built on `fastapi.security.HTTPBearer`. It extracts the bearer token, calls `supabase.auth.get_user(token)` (a real network call to Supabase), and raises a custom `AuthError` — mapped to a clean `{"error": ...}` JSON body — on anything invalid. Every protected route just adds `Depends(get_current_user)`; `/protected/dashboard` was added with zero additional auth code to prove it.
+
+### 6. Swagger bearer auth
+`/docs` shows a lock icon on `/auth/logout`, `/protected/profile`, and `/protected/dashboard` (FastAPI derives this automatically from the `HTTPBearer` dependency). Click **Authorize**, paste an `access_token` from `/auth/login`, and **Try it out** on any protected route — no curl needed.
+
+*(Swagger screenshot: `docs/swagger-auth-screenshot.png`)*
+
+### 7. AI vs me (Stage 7 — the AI rematch)
+
+I wrote a prompt from memory (without rereading this assignment doc) asking an AI to build the same secured API, generated the result into [`ai-version/`](ai-version/) on its own — separate from Stages 0–6 above — ran it against the same checkpoints, and compared it to what I built by hand.
+
+**The prompt** ([`ai-version/PROMPT.md`](ai-version/PROMPT.md)):
+> Build a FastAPI backend that uses Supabase for authentication. I need: `POST /auth/signup` (email/password → creates a Supabase user), `POST /auth/login` (returns the access token), `POST /auth/logout` (needs to be authenticated), `GET /protected/profile` (logged-in users only), `GET /public/info` (no auth). Use environment variables for the Supabase URL/key. Add a dependency/middleware that checks the Authorization header for a Bearer token and verifies it with Supabase before letting protected requests through. Make sure Swagger shows a lock icon and lets me authorize with a bearer token. Status codes: 201 signup, 200 login, 204 logout, 400 bad input, 401 missing/bad token.
+
+**What I found, running it (not just reading it):**
+
+1. **Token extraction** — it correctly used `fastapi.security.HTTPBearer`, so a missing/malformed header does land on `401` in this FastAPI version (I initially assumed it would 403 by default, based on older FastAPI behavior — checked the installed `0.139.0` source and it doesn't; worth verifying instead of assuming). What it *didn't* get right: the response body is `{"detail": "Not authenticated"}`, FastAPI's default shape — not the `{"error": ...}` shape my prompt asked for on every error, everywhere.
+2. **A real security flaw in `/auth/logout`** — the AI called bare `supabase.auth.sign_out()`. That method signs out whatever session is cached on the *client instance*, not the token the caller presented. Since this server uses one shared global `Client` for all requests, I proved this with a two-user test: User A calls `/auth/logout` with their own token and gets `204`, but A's token is **still valid** afterward — meanwhile User B, who never logged out, gets **silently logged out instead**, because B's login was the last one to overwrite the shared client's cached session. My hand-built version avoids this entirely by calling `supabase.auth.admin.sign_out(token, "local")` with the caller's own token explicitly (still only the anon key — never `service_role`).
+3. **What my prompt forgot to specify** — the exact `{"error": ...}` error shape, and that email/password presence has to be checked *before* Supabase is called. Without that, the AI reasonably used required (non-`Optional`) Pydantic fields, so a signup missing `password` returns FastAPI's automatic `422 Unprocessable Entity` instead of the `400` my prompt asked for — Pydantic validation runs before the route body ever executes. It also silently decided to return the *entire* raw Supabase user object on signup rather than a curated subset, and didn't add a second protected route to prove the guard is reusable, since I never asked for one.
+
+**The rematch:** I rewrote the prompt ([`ai-version/PROMPT_V2.md`](ai-version/PROMPT_V2.md)) to pin down the `{"error": ...}` shape everywhere, require validating input before calling Supabase, spell out that logout must target the caller's *own* token on a stateless/concurrent server, and asked for a second protected route. Regenerated `ai-version/main.py` and re-ran everything: `400` with `{"error": ...}` on missing input, and the two-user logout test now passes cleanly (A's logout invalidates only A's token, B is untouched). **What changed in one sentence:** naming the exact failure modes I'd already seen (wrong error shape, wrong status code source, and the shared-client logout bug) turned three silent gaps into an explicit spec the second generation actually met.
+
+---
+
 ## W3 · A1 — Tasks CRUD backed by SQLite
 
 ### 1. Why SQLite
