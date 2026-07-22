@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from supabase import AuthApiError
@@ -8,6 +8,15 @@ from supabase import AuthApiError
 from auth_service import supabase
 
 router = APIRouter()
+
+
+def extract_bearer_token(authorization: Optional[str]) -> Optional[str]:
+    if not authorization:
+        return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return None
+    return token.strip()
 
 
 class AuthCredentials(BaseModel):
@@ -50,3 +59,18 @@ def login(payload: AuthCredentials):
         "refresh_token": result.session.refresh_token,
         "token_type": "bearer",
     }
+
+
+@router.get("/public/info")
+def public_info():
+    return {"message": "Welcome stranger! This info is public."}
+
+
+@router.get("/protected/profile")
+def get_profile(authorization: Optional[str] = Header(default=None)):
+    token = extract_bearer_token(authorization)
+    if not token:
+        return JSONResponse(status_code=401, content={"error": "Access token required"})
+
+    # Stage 3 will verify this token with Supabase instead of just checking it exists.
+    return {"message": "token received, not verified yet"}
