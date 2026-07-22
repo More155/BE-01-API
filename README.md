@@ -1,3 +1,49 @@
+## W2 · A4 — Auth · Login & protect (Supabase)
+
+### 1. What this is
+A secured layer on top of the existing API using **Supabase Auth** as the Identity Provider: sign up, log in, log out, and two protected routes that only answer for a verified, logged-in user. No password hashing or JWT signing happens in this codebase — Supabase does that; this server only forwards credentials and verifies the tokens Supabase hands back.
+
+### 2. Setup
+1. Create a free project at [supabase.com](https://supabase.com) (or reuse one).
+2. Under **Project Settings → API**, copy the **Project URL** and the **anon key** (never the `service_role` key).
+3. Under **Authentication → Sign In / Providers → Email**, turn **Confirm email** off for local testing so a fresh signup can log in immediately.
+4. Add to your `.env` (see `.env.example`):
+   ```
+   SUPABASE_URL=your_project_url
+   SUPABASE_KEY=your_anon_key
+   ```
+
+### 3. Run it
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8080
+```
+Interactive docs: `http://127.0.0.1:8080/docs`
+
+### 4. Endpoints
+| Method | Path | Auth | Behavior |
+| --- | --- | --- | --- |
+| `POST` | `/auth/signup` | none | Creates a Supabase user. `201` on success, `400` if `email`/`password` missing or rejected by Supabase. |
+| `POST` | `/auth/login` | none | Returns an `access_token` + `refresh_token`. `400` missing input, `401` invalid credentials. |
+| `POST` | `/auth/logout` | Bearer | Revokes the presented session. `204` on success, `401` if the token is missing/invalid. |
+| `GET` | `/protected/profile` | Bearer | Returns the verified user's id/email/created_at. `401` if missing/invalid/expired token. |
+| `GET` | `/protected/dashboard` | Bearer | Second route proving the same guard is reusable — no new auth code. |
+| `GET` | `/public/info` | none | Open, unauthenticated endpoint. |
+
+All errors are returned as `{"error": "..."}` with the matching status code (`400`/`401`).
+
+### 5. How the guard works
+`auth.py` defines `get_current_user`, a FastAPI dependency built on `fastapi.security.HTTPBearer`. It extracts the bearer token, calls `supabase.auth.get_user(token)` (a real network call to Supabase), and raises a custom `AuthError` — mapped to a clean `{"error": ...}` JSON body — on anything invalid. Every protected route just adds `Depends(get_current_user)`; `/protected/dashboard` was added with zero additional auth code to prove it.
+
+### 6. Swagger bearer auth
+`/docs` shows a lock icon on `/auth/logout`, `/protected/profile`, and `/protected/dashboard` (FastAPI derives this automatically from the `HTTPBearer` dependency). Click **Authorize**, paste an `access_token` from `/auth/login`, and **Try it out** on any protected route — no curl needed.
+
+*(Swagger screenshot: `docs/swagger-auth-screenshot.png`)*
+
+---
+
 ## W3 · A1 — Tasks CRUD backed by SQLite
 
 ### 1. Why SQLite
