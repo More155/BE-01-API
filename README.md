@@ -40,7 +40,7 @@ All errors are returned as `{"error": "..."}` with the matching status code (`40
 ### 6. Swagger bearer auth
 `/docs` shows a lock icon on `/auth/logout`, `/protected/profile`, and `/protected/dashboard` (FastAPI derives this automatically from the `HTTPBearer` dependency). Click **Authorize**, paste an `access_token` from `/auth/login`, and **Try it out** on any protected route — no curl needed.
 
-*(Swagger screenshot: `docs/swagger-auth-screenshot.png`)*
+![Swagger UI showing the Authorize padlock and a 200 response from /protected/profile](docs/swagger-auth-screenshot.png)
 
 ### 7. AI vs me (Stage 7 — the AI rematch)
 
