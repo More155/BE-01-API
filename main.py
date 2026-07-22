@@ -1,4 +1,8 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Body, Depends, BackgroundTasks
 from datetime import datetime
 import psycopg
