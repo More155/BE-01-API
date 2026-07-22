@@ -14,8 +14,10 @@ from fastapi.responses import FileResponse, JSONResponse
 from report_service import generate_pdf_report_job
 from scraper import EthicalScraper
 from tasks_db import get_tasks_db_connection, init_tasks_db
+from auth import router as auth_router
 
 app = FastAPI()
+app.include_router(auth_router)
 
 init_tasks_db()
 
